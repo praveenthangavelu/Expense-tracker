@@ -1,0 +1,123 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/forms";
+
+:root {
+  --color-bg: #0f1117;
+  --color-surface: #1a1d27;
+  --color-surface-2: #202431;
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-text: #f8fafc;
+  --color-muted: #8b8fa3;
+  --color-emerald: #10b981;
+  --color-coral: #ef4444;
+  --color-lavender: #a78bfa;
+  --font-headline: "Plus Jakarta Sans", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--color-bg);
+  color-scheme: dark;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.16), transparent 34rem),
+    radial-gradient(circle at bottom right, rgba(239, 68, 68, 0.12), transparent 32rem),
+    var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  opacity: 0.02;
+  background-image:
+    linear-gradient(45deg, #fff 25%, transparent 25%),
+    linear-gradient(-45deg, #fff 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #fff 75%),
+    linear-gradient(-45deg, transparent 75%, #fff 75%);
+  background-position:
+    0 0,
+    0 6px,
+    6px -6px,
+    -6px 0;
+  background-size: 12px 12px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background: rgba(16, 185, 129, 0.35);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f1117;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2b3040;
+  border-radius: 999px;
+}
+
+.glass {
+  border: 1px solid var(--color-border);
+  background: rgba(26, 29, 39, 0.78);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+}
+
+.amount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.fluid-title {
+  font-size: clamp(2rem, 6vw, 5.25rem);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment configurations
+.env
+client/.env
+server/.env
+*.local
+
+# Build output
+client/dist/
+client/dist-ssr/
+
+# Editor and system files
+.vscode/
+.idea/
+.DS_Store
+*.log
+npm-debug.log*
+
+# Agent caches and logs
+.agents/
+skills-lock.json
+package-lock.json
