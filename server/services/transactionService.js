@@ -21,6 +21,11 @@ export const buildFilterQuery = (userId, filters = {}) => {
     query.category = filters.category;
   }
 
+  // If a search query exists, filter note using case-insensitive regex
+  if (filters.search) {
+    query.note = { $regex: filters.search, $options: "i" };
+  }
+
   // date filters share the same date object so startDate and endDate can work together.
   if (filters.startDate || filters.endDate) {
     query.date = {};

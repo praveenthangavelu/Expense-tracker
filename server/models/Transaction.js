@@ -5,18 +5,10 @@ import mongoose from "mongoose";
 const transactionSchema = new mongoose.Schema({
   // Link this transaction to the user who owns it.
   user: {
-    // ObjectId stores the _id value of another MongoDB document.
     type: mongoose.Schema.Types.ObjectId,
-
-    // ref: "User" tells Mongoose this ObjectId points to a document in the User model.
-    // This link lets us later populate user details or fetch only one user's transactions.
     ref: "User",
-
-    // Every transaction must belong to a user.
     required: true,
-
-    // This single-field index helps MongoDB quickly find transactions for one user.
-    // Without an index, MongoDB may need to scan every transaction document one by one.
+    // Single-field index helps MongoDB quickly find transactions for one user.
     index: true,
   },
 
@@ -24,9 +16,7 @@ const transactionSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-
     // enum validation allows only these exact values.
-    // This prevents invalid types like "spent", "deposit", or spelling mistakes.
     enum: ["income", "expense"],
   },
 
@@ -34,8 +24,6 @@ const transactionSchema = new mongoose.Schema({
   amount: {
     type: Number,
     required: true,
-
-    // min prevents zero or negative transactions.
     min: 0.01,
   },
 
@@ -43,8 +31,6 @@ const transactionSchema = new mongoose.Schema({
   category: {
     type: String,
     required: true,
-
-    // trim removes extra spaces from the start and end of the category name.
     trim: true,
   },
 
@@ -59,7 +45,7 @@ const transactionSchema = new mongoose.Schema({
   note: {
     type: String,
     trim: true,
-    maxlength: 200,
+    maxlength: 500,
     default: "",
   },
 
@@ -70,6 +56,13 @@ const transactionSchema = new mongoose.Schema({
     default: Date.now,
   },
 
+  // Link to scanned receipt if any
+  receipt: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Receipt",
+    default: null,
+  },
+
   // Store when this transaction record was created in the database.
   createdAt: {
     type: Date,
@@ -77,23 +70,35 @@ const transactionSchema = new mongoose.Schema({
   },
 });
 
-// An index is like a lookup table MongoDB keeps to find documents faster.
-// This compound index uses two fields together: user and date.
-// It helps fetch one user's transactions already ordered by newest date first.
+// ─────────────────────────────────────────────────────────────────────────────
+// INDEXES — every query pattern the app runs should hit an index.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Default list query: user's transactions ordered by newest first.
 transactionSchema.index({ user: 1, date: -1 });
 
-// In index definitions, 1 means ascending order and -1 means descending order.
-// Here user: 1 groups by user, while date: -1 sorts that user's results newest first.
+// Filtered by type (e.g., show only expenses).
+transactionSchema.index({ user: 1, type: 1, date: -1 });
 
-// A compound index uses multiple fields together, unlike a single-field index such as user only.
-// This one helps category reports, such as "show all Food expenses for this user".
-transactionSchema.index({ user: 1, category: 1 });
+// Filtered by category (category reports, pie chart data).
+transactionSchema.index({ user: 1, category: 1, date: -1 });
 
-// This compound index helps category/subcategory breakdowns, such as "show all Food subcategory expenses for this user".
+// Food subcategory breakdown queries.
+transactionSchema.index({ user: 1, subCategory: 1, date: -1 });
+
+// Category + subcategory combined breakdown.
 transactionSchema.index({ user: 1, category: 1, subCategory: 1 });
 
-// Create the Transaction model from the schema so the app can create and query transactions.
+// Compound index for summary aggregations that group by type and category.
+transactionSchema.index({ user: 1, date: -1, type: 1, category: 1 });
+
+// Most recent transactions for advisor and health score lookups.
+transactionSchema.index({ user: 1, createdAt: -1 });
+
+// Fast lookup of transaction by linked receipt
+transactionSchema.index({ receipt: 1 });
+
+// Create the Transaction model from the schema.
 const Transaction = mongoose.model("Transaction", transactionSchema);
 
-// Export the model so controllers and routes can import it later.
 export default Transaction;

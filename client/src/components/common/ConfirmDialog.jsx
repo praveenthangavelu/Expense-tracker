@@ -11,7 +11,7 @@ const ConfirmDialog = ({
   onConfirm,
 }) => (
   <Modal isOpen={isOpen} onClose={onCancel} title={title} maxWidth="max-w-md">
-    <p className="mb-6 text-slate-300">{message}</p>
+    <p className="mb-6 text-[var(--text-secondary)]">{message}</p>
     <div className="flex justify-end gap-3">
       <Button variant="ghost" onClick={onCancel}>
         Cancel

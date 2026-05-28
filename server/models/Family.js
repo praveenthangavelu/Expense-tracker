@@ -53,7 +53,6 @@ const familySchema = new mongoose.Schema({
   },
 });
 
-familySchema.index({ inviteCode: 1 }, { unique: true });
 familySchema.index({ "members.user": 1 });
 
 const Family = mongoose.model("Family", familySchema);

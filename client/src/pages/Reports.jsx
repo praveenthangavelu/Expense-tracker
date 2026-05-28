@@ -1,22 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { format } from "date-fns";
 import { Download } from "lucide-react";
+import { motion } from "framer-motion";
+import clsx from "clsx";
 
 import Button from "../components/common/Button";
 import Card from "../components/common/Card";
 import { transactionService } from "../services/transactionService";
-import { CATEGORY_EMOJIS } from "../utils/constants";
 import { exportCSV } from "../utils/exportCSV";
 import { formatCurrency } from "../utils/formatCurrency";
+
+// Import modular components
+import StatsGrid from "../components/insights/StatsGrid";
+import DailyTrendChart from "../components/insights/DailyTrendChart";
+import CategoryTable from "../components/insights/CategoryTable";
+import TopExpenses from "../components/insights/TopExpenses";
+
+const safeFormatDate = (dateStr, formatStr = "dd MMM") => {
+  if (!dateStr) return "N/A";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "N/A";
+  try {
+    return format(d, formatStr);
+  } catch {
+    return "N/A";
+  }
+};
 
 const monthOptions = Array.from({ length: 6 }).map((_, index) => {
   const date = new Date();
@@ -79,10 +88,46 @@ const Reports = () => {
     };
   }, [transactions]);
 
+  const lastMonthStats = useMemo(() => {
+    const income = lastMonthTransactions
+      .filter((item) => item.type === "income")
+      .reduce((sum, item) => sum + item.amount, 0);
+    const expenses = lastMonthTransactions
+      .filter((item) => item.type === "expense")
+      .reduce((sum, item) => sum + item.amount, 0);
+
+    return {
+      income,
+      expenses,
+      savings: income - expenses,
+      count: lastMonthTransactions.length,
+    };
+  }, [lastMonthTransactions]);
+
+  const changeBadges = useMemo(() => {
+    const getBadge = (curr, prev) => {
+      if (prev === 0) return { text: "No history", isIncrease: null };
+      const diff = curr - prev;
+      const pct = Math.round((diff / prev) * 100);
+      const isIncrease = diff > 0;
+      return {
+        text: `${isIncrease ? "↑" : "↓"} ${Math.abs(pct)}%`,
+        isIncrease,
+      };
+    };
+
+    return {
+      income: getBadge(stats.income, lastMonthStats.income),
+      expenses: getBadge(stats.expenses, lastMonthStats.expenses),
+      savings: getBadge(stats.savings, lastMonthStats.savings),
+      count: getBadge(stats.count, lastMonthStats.count),
+    };
+  }, [stats, lastMonthStats]);
+
   const trend = useMemo(() => {
     const rows = {};
     transactions.forEach((item) => {
-      const day = format(new Date(item.date), "d MMM");
+      const day = safeFormatDate(item.date, "d MMM");
       rows[day] ||= { day, Income: 0, Expense: 0 };
       rows[day][item.type === "income" ? "Income" : "Expense"] += item.amount;
     });
@@ -120,205 +165,153 @@ const Reports = () => {
 
     const allSubs = Array.from(new Set([...Object.keys(thisMonthSub), ...Object.keys(lastMonthSub)]));
 
-    return allSubs.map((sub) => {
-      const current = thisMonthSub[sub] || 0;
-      const previous = lastMonthSub[sub] || 0;
-      const change = current - previous;
-      const pct = previous > 0 ? Math.round((change / previous) * 100) : 0;
-      return {
-        subCategory: sub,
-        current,
-        previous,
-        change,
-        pct,
-      };
-    }).sort((a, b) => b.current - a.current);
+    return allSubs
+      .map((sub) => {
+        const current = thisMonthSub[sub] || 0;
+        const previous = lastMonthSub[sub] || 0;
+        const change = current - previous;
+        const pct = previous > 0 ? Math.round((change / previous) * 100) : 0;
+        return {
+          subCategory: sub,
+          current,
+          previous,
+          change,
+          pct,
+        };
+      })
+      .sort((a, b) => b.current - a.current);
   }, [transactions, lastMonthTransactions]);
 
-  const biggest = [...transactions]
-    .filter((item) => item.type === "expense")
-    .sort((a, b) => b.amount - a.amount)
-    .slice(0, 5);
+  const biggest = useMemo(() => {
+    return [...transactions]
+      .filter((item) => item.type === "expense")
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+  }, [transactions]);
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      transition={{ type: "spring", damping: 30, stiffness: 400 }}
+      className="space-y-6"
+    >
+      {/* HEADER SECTION */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h2 className="font-display text-2xl font-bold text-white">Reports</h2>
-          <p className="text-slate-500">Monthly trends and category intelligence.</p>
+          <h2 className="font-display text-2xl font-bold text-white tracking-tight">Reports</h2>
+          <p className="text-sm text-[var(--text-secondary)] font-medium">
+            Monthly trends and category intelligence.
+          </p>
         </div>
-        <Button variant="outline" onClick={() => exportCSV(transactions)}>
-          <Download className="h-4 w-4" />
+        <Button variant="glass" onClick={() => exportCSV(transactions)} className="h-11">
+          <Download className="h-4 w-4 mr-1 shrink-0" />
           Export CSV
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {monthOptions.map((option) => (
-          <button
-            key={option.label}
-            type="button"
-            onClick={() => setSelected(option)}
-            className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
-              selected.label === option.label
-                ? "bg-emerald-400 text-slate-950"
-                : "bg-white/[0.04] text-slate-400 hover:text-white"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
+      {/* MONTH SELECTOR */}
+      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none snap-x snap-mandatory border-b border-[var(--border-subtle)]">
+        {monthOptions.map((option) => {
+          const isSelected = selected.label === option.label;
+          return (
+            <button
+              key={option.label}
+              type="button"
+              onClick={() => setSelected(option)}
+              className={clsx(
+                "relative rounded-xl px-5 py-3 text-xs font-semibold tracking-wider uppercase transition-colors shrink-0 snap-start cursor-pointer h-[42px] flex items-center justify-center min-w-[100px]",
+                isSelected ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)] hover:text-white"
+              )}
+            >
+              {isSelected && (
+                <motion.span
+                  layoutId="report-month-indicator"
+                  className="absolute inset-0 rounded-xl bg-[var(--electric-soft)] border border-[rgba(124,111,255,0.3)] shadow-[var(--shadow-glow-electric)]"
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                />
+              )}
+              <span className="relative z-10">{option.label}</span>
+            </button>
+          );
+        })}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        {[
-          ["Income", stats.income, "text-emerald-300"],
-          ["Expenses", stats.expenses, "text-red-300"],
-          ["Savings", stats.savings, stats.savings >= 0 ? "text-emerald-300" : "text-red-300"],
-          ["Count", stats.count, "text-violet-300"],
-        ].map(([label, value, color]) => (
-          <Card key={label}>
-            <p className="text-sm text-slate-500">{label}</p>
-            <p className={`amount mt-2 text-3xl font-bold ${color}`}>
-              {label === "Count" ? value : formatCurrency(value)}
+      {/* Stats Cards */}
+      <StatsGrid stats={stats} changeBadges={changeBadges} />
+
+      {/* Daily trend area chart */}
+      <DailyTrendChart trend={trend} />
+
+      {/* Grid of Categories and Top Expenses */}
+      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <CategoryTable categories={categories} totalExpenses={stats.expenses} />
+        <TopExpenses biggest={biggest} />
+      </div>
+
+      {/* FOOD SUBCATEGORY DETAIL CHART / TABLE */}
+      <Card
+        header={
+          <div>
+            <h3 className="font-display text-base font-bold text-white">Food Breakdown</h3>
+            <p className="text-xs text-[var(--text-secondary)] font-medium mt-0.5">
+              Food sub-category itemized monthly comparison
             </p>
-            <p className="mt-3 text-xs text-emerald-300">↑ Live from selected month</p>
-          </Card>
-        ))}
-      </div>
-
-      <Card
-        header={
-          <div>
-            <h3 className="font-display text-xl font-bold text-white">
-              Income vs Expense Trend
-            </h3>
-            <p className="text-sm text-slate-500">Daily movement inside the month</p>
-          </div>
-        }
-      >
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={trend}>
-              <defs>
-                <linearGradient id="incomeFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10B981" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="expenseFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-              <XAxis dataKey="day" stroke="#8B8FA3" tickLine={false} axisLine={false} />
-              <YAxis stroke="#8B8FA3" tickLine={false} axisLine={false} width={80} />
-              <Tooltip
-                formatter={(value) => formatCurrency(value)}
-                contentStyle={{
-                  background: "#151823",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "16px",
-                }}
-              />
-              <Area type="monotone" dataKey="Income" stroke="#10B981" fill="url(#incomeFill)" />
-              <Area type="monotone" dataKey="Expense" stroke="#EF4444" fill="url(#expenseFill)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
-
-      <div className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
-        <Card
-          header={<h3 className="font-display text-xl font-bold text-white">Category Breakdown</h3>}
-        >
-          <div className="space-y-2">
-            {categories.map((category) => {
-              const percentage = stats.expenses
-                ? Math.round((category.amount / stats.expenses) * 100)
-                : 0;
-              return (
-                <div key={category.name} className="rounded-2xl p-3 odd:bg-white/[0.03]">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-white">
-                      {CATEGORY_EMOJIS[category.name] || "📌"} {category.name}
-                    </p>
-                    <p className="amount text-slate-300">{formatCurrency(category.amount)}</p>
-                  </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
-                    <div
-                      className="h-full rounded-full bg-emerald-400"
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-
-        <Card
-          header={<h3 className="font-display text-xl font-bold text-white">Top 5 Expenses</h3>}
-        >
-          <div className="space-y-2">
-            {biggest.map((item, index) => (
-              <div
-                key={item._id}
-                className={`flex items-center justify-between rounded-2xl p-3 ${
-                  index === 0 ? "bg-yellow-400/10 text-yellow-200" : "bg-white/[0.03]"
-                }`}
-              >
-                <span className="font-semibold">
-                  #{index + 1} {item.category}
-                </span>
-                <span className="amount font-bold">{formatCurrency(item.amount)}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-      {/* Food Subcategory Breakdown Section */}
-      <Card
-        header={
-          <div>
-            <h3 className="font-display text-xl font-bold text-white">Food Breakdown</h3>
-            <p className="text-sm text-slate-500">Monthly sub-category comparisons</p>
           </div>
         }
       >
         {foodComparison.length === 0 ? (
-          <p className="text-sm text-slate-500 py-6 text-center">No Food expenses recorded this month.</p>
+          <p className="text-xs text-[var(--text-secondary)] font-medium py-8 text-center">
+            No Food expenses recorded this month.
+          </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-300">
-              <thead className="text-xs uppercase text-slate-500 border-b border-white/10">
-                <tr>
-                  <th className="py-3 px-4">Sub-Category</th>
-                  <th className="py-3 px-4 text-right">This Month</th>
-                  <th className="py-3 px-4 text-right">Last Month</th>
-                  <th className="py-3 px-4 text-right">Change</th>
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-[var(--border-subtle)] text-[var(--text-dim)] uppercase tracking-wider font-bold">
+                  <th className="pb-3 px-4">Sub-Category</th>
+                  <th className="pb-3 px-4 text-right">This Month</th>
+                  <th className="pb-3 px-4 text-right">Last Month</th>
+                  <th className="pb-3 px-4 text-right">Change</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-[var(--border-subtle)]">
                 {foodComparison.map((item) => {
                   const name = item.subCategory;
                   const icon = subCategoryIcons[name] || "🍽️";
-                  const changeColor = item.change > 0 ? "text-red-400" : item.change < 0 ? "text-emerald-400" : "text-slate-400";
-                  const changeText = item.change > 0 
-                    ? `+${formatCurrency(item.change)} (+${item.pct}%)`
-                    : item.change < 0
-                    ? `-${formatCurrency(Math.abs(item.change))} (${item.pct}%)`
-                    : "0";
+                  const changeColor =
+                    item.change > 0
+                      ? "text-[var(--flame)]"
+                      : item.change < 0
+                      ? "text-[var(--mint)]"
+                      : "text-[var(--text-secondary)]";
+
+                  const changeText =
+                    item.change > 0
+                      ? `+${formatCurrency(item.change)} (+${item.pct}%)`
+                      : item.change < 0
+                      ? `-${formatCurrency(Math.abs(item.change))} (${item.pct}%)`
+                      : "0";
+
                   return (
-                    <tr key={name} className="hover:bg-white/[0.02] transition">
-                      <td className="py-3 px-4 font-semibold text-white flex items-center gap-2">
-                        <span className="text-lg">{icon}</span>
+                    <tr
+                      key={name}
+                      className="hover:bg-[var(--bg-hover)] transition-all duration-200"
+                    >
+                      <td className="py-3 px-4 font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                        <span className="text-base select-none">{icon}</span>
                         <span>{name}</span>
                       </td>
-                      <td className="py-3 px-4 text-right amount font-semibold">{formatCurrency(item.current)}</td>
-                      <td className="py-3 px-4 text-right amount text-slate-500">{formatCurrency(item.previous)}</td>
-                      <td className={`py-3 px-4 text-right amount font-bold ${changeColor}`}>{changeText}</td>
+                      <td className="py-3 px-4 text-right font-mono font-semibold text-[var(--text-primary)]">
+                        {formatCurrency(item.current)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono text-[var(--text-dim)]">
+                        {formatCurrency(item.previous)}
+                      </td>
+                      <td className={clsx("py-3 px-4 text-right font-mono font-bold", changeColor)}>
+                        {changeText}
+                      </td>
                     </tr>
                   );
                 })}
@@ -327,7 +320,7 @@ const Reports = () => {
           </div>
         )}
       </Card>
-    </div>
+    </motion.div>
   );
 };
 

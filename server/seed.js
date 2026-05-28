@@ -7,9 +7,11 @@ import mongoose from "mongoose";
 // Import the Category and SubCategory models so this script can delete and create documents.
 import Category from "./models/Category.js";
 import SubCategory from "./models/SubCategory.js";
+import Badge from "./models/Badge.js";
 
 // Import the default category and subcategory list used by the app.
 import { DEFAULT_CATEGORIES, FOOD_SUBCATEGORIES } from "./utils/constants.js";
+import { BADGE_DEFINITIONS } from "./utils/badgeDefinitions.js";
 
 // Load environment variables before using process.env.MONGO_URI.
 dotenv.config();
@@ -62,6 +64,19 @@ const seedDefaultCategories = async () => {
 
     const createdSubCategories = await SubCategory.insertMany(subCategoriesToCreate);
     console.log(`Seeded ${createdSubCategories.length} default food subcategories`);
+
+    // ─── Seed Default Badges ──────────────────────────────────────────────────
+    let badgeCount = 0;
+    for (const def of BADGE_DEFINITIONS) {
+      await Badge.updateOne(
+        { key: def.key },
+        { $set: def },
+        { upsert: true }
+      );
+      badgeCount++;
+    }
+    console.log(`Seeded ${badgeCount} badge definitions`);
+    // ──────────────────────────────────────────────────────────────────────────
   } catch (error) {
     // Print any error so setup problems are easy to debug.
     console.error(error);

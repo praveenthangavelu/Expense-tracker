@@ -53,9 +53,11 @@ const categorySchema = new mongoose.Schema({
   },
 });
 
-// A compound index uses multiple fields together instead of only one field.
-// A unique compound index means the combination of user + name + type must be unique.
+// user+name+type unique: prevents duplicate category names per user per type.
 categorySchema.index({ user: 1, name: 1, type: 1 }, { unique: true });
+
+// user+type: speeds up getAll filtered by type (e.g., show only expense categories).
+categorySchema.index({ user: 1, type: 1 });
 
 // This prevents one user from creating duplicate category names for the same type.
 // Example: the same user cannot have two "Food" expense categories.

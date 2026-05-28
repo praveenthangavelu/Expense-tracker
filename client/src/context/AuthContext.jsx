@@ -77,18 +77,44 @@ export const AuthProvider = ({ children }) => {
     navigate("/dashboard", { replace: true });
   }, [navigate, persistSession]);
 
+  const loginWithGoogle = useCallback(async (code) => {
+    const response = await authService.loginWithGoogle(code);
+    persistSession(response.data.user, response.data.token);
+    toast.success("Welcome back");
+    navigate("/dashboard", { replace: true });
+  }, [navigate, persistSession]);
+
   const logout = useCallback(() => {
     clearSession();
     toast.success("Signed out");
     navigate("/login", { replace: true });
   }, [clearSession, navigate]);
 
-  const updateUser = useCallback((data) => {
+  const updateUser = useCallback((data, showToast = true) => {
     const nextUser = { ...user, ...data };
     setUser(nextUser);
     localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
-    toast.success("Profile updated locally");
+    if (showToast) {
+      toast.success("Profile updated");
+    }
   }, [user]);
+
+  const updateSettings = useCallback(async (data) => {
+    try {
+      const response = await authService.updateSettings(data);
+      const updatedUser = response.data.user || response.data;
+      setUser((current) => {
+        const nextUser = { ...current, ...updatedUser };
+        localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+        return nextUser;
+      });
+      toast.success("Automation settings saved");
+      return true;
+    } catch (err) {
+      toast.error(err.message || "Failed to save settings");
+      return false;
+    }
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -98,10 +124,12 @@ export const AuthProvider = ({ children }) => {
       loading,
       login,
       register,
+      loginWithGoogle,
       logout,
       updateUser,
+      updateSettings,
     }),
-    [loading, login, logout, register, token, updateUser, user],
+    [loading, login, logout, register, loginWithGoogle, token, updateUser, updateSettings, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

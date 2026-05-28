@@ -2,13 +2,13 @@
 import express from "express";
 
 // Import auth controller functions that contain the route logic.
-import { getMe, login, register } from "../controllers/authController.js";
+import { getMe, login, register, updateSettings, getGoogleLoginUrl, googleLoginCallback } from "../controllers/authController.js";
 
 // Import auth middleware for routes that require a valid JWT.
 import { auth } from "../middleware/auth.js";
 
 // Import validation helpers and schemas for checking request bodies before controllers run.
-import { loginSchema, registerSchema, validate } from "../middleware/validate.js";
+import { loginSchema, registerSchema, validate, updateAutomationSettingsSchema } from "../middleware/validate.js";
 
 // Create a router so auth routes can be mounted under /api/auth in app.js.
 const router = express.Router();
@@ -21,9 +21,18 @@ router.post("/register", validate(registerSchema), register);
 // validate(loginSchema) makes sure email and password are present before login() runs.
 router.post("/login", validate(loginSchema), login);
 
+// GET /api/auth/google/url
+router.get("/google/url", getGoogleLoginUrl);
+
+// POST /api/auth/google/callback
+router.post("/google/callback", googleLoginCallback);
+
 // GET /api/auth/me
 // auth verifies the JWT first, then getMe returns the current user from req.user.
 router.get("/me", auth, getMe);
+
+// PUT /api/auth/settings
+router.put("/settings", auth, validate(updateAutomationSettingsSchema), updateSettings);
 
 // Export the router so app.js can mount all auth routes at once.
 export default router;

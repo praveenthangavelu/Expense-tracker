@@ -27,8 +27,11 @@ export const auth = async (req, res, next) => {
 
   try {
     // jwt.verify() checks the token signature using JWT_SECRET.
-    // If the token was changed, signed with a different secret, or expired, verification throws an error.
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // algorithms: ['HS256'] explicitly restricts which algorithms are accepted.
+    // Without this, an attacker could craft a token with alg: 'none' to bypass signature verification.
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+      algorithms: ["HS256"],
+    });
 
     // If JWT_SECRET is compromised, attackers could sign fake tokens.
     // That is why JWT_SECRET must stay private and should be rotated if it is ever exposed.

@@ -1,55 +1,84 @@
+// Enhanced error handler with:
+//   - Structured JSON logging (timestamp, userId, IP, errorCode)
+//   - Typed error recognition (Mongoose, JWT)
+//   - errorCode field in every error response for programmatic handling on the frontend
+//   - Stack traces only in development (never leak internals in production)
+
+import { AppError } from "../utils/AppError.js";
+
 // Express knows this is error-handling middleware because it has exactly 4 parameters.
-// The order must be (err, req, res, next); if one is missing, Express treats it like normal middleware.
 const errorHandler = (err, req, res, next) => {
-  // Operational errors are expected runtime problems, like invalid IDs or duplicate emails.
-  // Programming errors are bugs in our code, like using an undefined variable or calling a function wrong.
-  // This handler gives clients a clean response for operational errors and avoids leaking internals.
+  let error = err;
 
-  // Use an error's custom statusCode when available, otherwise fall back to 500 for server errors.
-  let statusCode = err.statusCode || 500;
-
-  // Use the error's message when available, otherwise use a safe generic message.
-  let message = err.message || "Server Error";
-
-  // Mongoose CastError usually happens when an invalid MongoDB ObjectId is used in a route.
-  // Example: /api/transactions/not-a-real-id cannot be converted into an ObjectId.
+  // ─── Mongoose: invalid ObjectId ──────────────────────────────────────────
   if (err.name === "CastError") {
-    statusCode = 400;
-    message = "Resource not found — invalid ID format";
+    error = new AppError("Invalid ID format", 400, "INVALID_ID");
   }
 
-  // MongoDB duplicate key errors use code 11000.
-  // This happens when a unique field, like email, already exists in the database.
+  // ─── MongoDB: duplicate key ───────────────────────────────────────────────
   if (err.code === 11000) {
-    statusCode = 400;
-
-    // err.keyValue contains the duplicated field and value, for example { email: "a@test.com" }.
-    const fieldName = Object.keys(err.keyValue)[0];
-
-    message = `Duplicate value for field: ${fieldName}`;
+    const field = Object.keys(err.keyValue || {})[0] || "field";
+    error = new AppError(`Duplicate value for: ${field}`, 409, "DUPLICATE");
   }
 
-  // Mongoose ValidationError happens when schema rules fail.
-  // Example: amount is below 0.01, password is too short, or type is not in the enum list.
+  // ─── Mongoose: schema validation failure ──────────────────────────────────
   if (err.name === "ValidationError") {
-    statusCode = 400;
-
-    // err.errors is an object where each value contains a field-specific validation message.
-    message = Object.values(err.errors)
-      .map((fieldError) => fieldError.message)
-      .join(", ");
+    const message = Object.values(err.errors)
+      .map((e) => e.message)
+      .join(". ");
+    error = new AppError(message, 400, "VALIDATION_ERROR");
   }
 
-  // Send one consistent error response shape to the frontend.
-  res.status(statusCode).json({
-    success: false,
-    message,
+  // ─── JWT: tampered or wrong secret ───────────────────────────────────────
+  if (err.name === "JsonWebTokenError") {
+    error = new AppError("Invalid token", 401, "INVALID_TOKEN");
+  }
 
-    // Stack traces show file paths and code locations, which help during development.
-    // We hide them in production because they can reveal private server details to attackers.
-    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
-  });
+  // ─── JWT: token lifetime exceeded ────────────────────────────────────────
+  if (err.name === "TokenExpiredError") {
+    error = new AppError("Token expired, please log in again", 401, "TOKEN_EXPIRED");
+  }
+
+  const statusCode = error.statusCode || 500;
+  const errorCode = error.errorCode || "INTERNAL_ERROR";
+
+  // Structured log — one line per error, machine-parseable.
+  // Never log stack traces in production; they reveal file paths and library versions.
+  console.error(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      level: "ERROR",
+      method: req.method,
+      path: req.originalUrl,
+      status: statusCode,
+      errorCode,
+      message: err.message,
+      userId: req.user?.id || "anon",
+      ip: req.ip,
+      ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+    })
+  );
+
+  // Build the response body.
+  const body = {
+    success: false,
+    // Only expose the message for operational errors we intentionally threw.
+    // For unexpected programming errors, return a generic message so we don't leak internals.
+    message: error.isOperational ? error.message : "Internal server error",
+    errorCode,
+  };
+
+  // Include field-level validation errors if available.
+  if (error.errors && error.errors.length > 0) {
+    body.errors = error.errors;
+  }
+
+  // Attach stack trace in development for easier debugging.
+  if (process.env.NODE_ENV === "development") {
+    body.stack = err.stack;
+  }
+
+  res.status(statusCode).json(body);
 };
 
-// Export this middleware so server.js can register it after all routes.
 export default errorHandler;

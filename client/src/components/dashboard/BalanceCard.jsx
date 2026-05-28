@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Wallet } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, AlertTriangle } from "lucide-react";
 
 import Card from "../common/Card";
 import { useAnimatedNumber } from "../../hooks/useAnimatedNumber";
@@ -7,19 +7,24 @@ import { formatCurrency } from "../../utils/formatCurrency";
 import { budgetService } from "../../services/budgetService";
 
 const icons = {
-  income: ArrowUp,
-  expense: ArrowDown,
+  income: TrendingUp,
+  expense: TrendingDown,
   balance: Wallet,
 };
 
-const colors = {
-  income: "border-l-emerald-400 text-emerald-300",
-  expense: "border-l-red-400 text-red-300",
-  balance: "border-l-violet-400 text-violet-300",
+const cardVariants = {
+  income: "glow-mint",
+  expense: "glow-flame",
+  balance: "glow-electric",
+};
+
+const textColors = {
+  income: "text-[var(--mint)]",
+  expense: "text-[var(--flame)]",
+  balance: "text-[var(--mint)]", // defaults to mint if positive
 };
 
 const BalanceCard = ({ type, label, amount }) => {
-  const Icon = icons[type];
   const animated = useAnimatedNumber(amount);
   const [budget, setBudget] = useState(null);
 
@@ -37,36 +42,80 @@ const BalanceCard = ({ type, label, amount }) => {
   }, [type]);
 
   const pct = budget && budget.limit > 0 ? budget.percentage : 0;
-  const barColor = pct >= 90 ? "bg-red-400" : pct >= 70 ? "bg-amber-400" : "bg-emerald-400";
+  const barColor = pct >= 90 ? "bg-[var(--flame)]" : pct >= 70 ? "bg-[var(--solar)]" : "bg-[var(--mint)]";
+
+  // Balance status icon & color based on value
+  const isNegative = type === "balance" && amount < 0;
+  const Icon = isNegative ? AlertTriangle : icons[type];
+  const amountColor = isNegative 
+    ? "text-[var(--flame)]" 
+    : type === "income" 
+    ? "text-[var(--mint)]" 
+    : type === "expense" 
+    ? "text-[var(--flame)]" 
+    : "text-[var(--mint)]";
+
+  const iconWrapperClass = isNegative
+    ? "bg-[var(--flame-soft)] text-[var(--flame)]"
+    : type === "income"
+    ? "bg-[var(--mint-soft)] text-[var(--mint)]"
+    : type === "expense"
+    ? "bg-[var(--flame-soft)] text-[var(--flame)]"
+    : "bg-[var(--electric-soft)] text-[var(--electric)]";
+
+  const subText = 
+    type === "income" 
+      ? "↑ 12% from last month" 
+      : type === "expense" 
+      ? "↓ 4% from last month" 
+      : isNegative 
+      ? "Negative balance" 
+      : "Healthy balance";
+
+  const subTextColor = 
+    type === "income" || (type === "balance" && !isNegative)
+      ? "text-[var(--mint)]"
+      : "text-[var(--flame)]";
 
   return (
-    <Card className={`border-l-4 ${colors[type]}`}>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-400">{label}</p>
-          <p className="amount mt-3 text-3xl font-bold text-white sm:text-4xl">
-            {formatCurrency(animated)}
-          </p>
+    <Card variant={cardVariants[type]} className="flex flex-col h-full justify-between">
+      <div>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.15em] text-[var(--text-dim)] uppercase">
+              {label}
+            </p>
+            <h2 className={`amount mt-3 text-3xl font-medium tracking-tight sm:text-4xl ${amountColor} font-mono`}>
+              {formatCurrency(animated)}
+            </h2>
+          </div>
+          <div className={`flex h-10 w-10 items-center justify-center rounded-full p-2.5 transition-colors ${iconWrapperClass}`}>
+            <Icon className="h-5 w-5" />
+          </div>
         </div>
-        <div className="rounded-2xl bg-white/[0.06] p-3">
-          <Icon className="h-6 w-6" />
-        </div>
+
+        {/* Budget Bar for Expense Card */}
+        {type === "expense" && budget && budget.limit > 0 && (
+          <div className="mt-5 space-y-1.5">
+            <div className="flex justify-between text-[11px] text-[var(--text-secondary)] font-semibold">
+              <span>Limit: {formatCurrency(budget.limit)}</span>
+              <span>{pct}% used</span>
+            </div>
+            <div className="h-1 w-full rounded-full bg-[var(--text-ghost)] overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-[1s] ease-out ${barColor}`}
+                style={{ width: `${Math.min(pct, 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {type === "expense" && budget && budget.limit > 0 && (
-        <div className="mt-4 space-y-1">
-          <div className="flex justify-between text-xs text-slate-500 font-semibold">
-            <span>Budget: {formatCurrency(budget.limit)}</span>
-            <span>{pct}% used</span>
-          </div>
-          <div className="h-1.5 w-full rounded-full bg-white/[0.04] overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-              style={{ width: `${Math.min(pct, 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
+      <div className="mt-4 flex items-center">
+        <span className={`text-[11px] font-bold tracking-wide ${subTextColor}`}>
+          {subText}
+        </span>
+      </div>
     </Card>
   );
 };

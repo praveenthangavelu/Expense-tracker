@@ -22,5 +22,13 @@ npm-debug.log*
 
 # Agent caches and logs
 .agents/
+.agent/
 skills-lock.json
 package-lock.json
+
+# Local database / runtime data
+data/
+server/uploads/
+
+# Local dev artifacts
+client/dev-dist/

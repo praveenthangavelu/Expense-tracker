@@ -14,6 +14,7 @@ import {
 } from "../services/transactionService";
 import { DEFAULT_FILTERS } from "../utils/constants";
 import { useAuth } from "./AuthContext";
+import { usePopups } from "./PopupContext";
 
 /* eslint-disable react-hooks/set-state-in-effect, react-refresh/only-export-components */
 
@@ -21,6 +22,7 @@ const TransactionContext = createContext(null);
 
 export const TransactionProvider = ({ children }) => {
   const { isAuthenticated } = useAuth();
+  const { addPopupToQueue } = usePopups();
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -105,22 +107,40 @@ export const TransactionProvider = ({ children }) => {
   }, [filters]);
 
   const addTransaction = useCallback(async (data) => {
-    await transactionService.create(data);
-    toast.success("Transaction added");
+    const res = await transactionService.create(data);
+    const healthTip = res.data?.healthTip;
+    if (!healthTip) {
+      toast.success("Transaction added");
+    }
+    if (res.data?.automations && Array.isArray(res.data.automations)) {
+      res.data.automations.forEach((pop) => addPopupToQueue(pop));
+    }
     await refresh();
-  }, [refresh]);
+    return res.data;
+  }, [refresh, addPopupToQueue]);
 
   const updateTransaction = useCallback(async (id, data) => {
-    await transactionService.update(id, data);
-    toast.success("Transaction updated");
+    const res = await transactionService.update(id, data);
+    const healthTip = res.data?.healthTip;
+    if (!healthTip) {
+      toast.success("Transaction updated");
+    }
+    if (res.data?.automations && Array.isArray(res.data.automations)) {
+      res.data.automations.forEach((pop) => addPopupToQueue(pop));
+    }
     await refresh();
-  }, [refresh]);
+    return res.data;
+  }, [refresh, addPopupToQueue]);
 
   const deleteTransaction = useCallback(async (id) => {
-    await transactionService.remove(id);
+    const res = await transactionService.remove(id);
     toast.success("Transaction deleted");
+    if (res.data?.automations && Array.isArray(res.data.automations)) {
+      res.data.automations.forEach((pop) => addPopupToQueue(pop));
+    }
     await refresh();
-  }, [refresh]);
+    return res.data;
+  }, [refresh, addPopupToQueue]);
 
   const addCategory = useCallback(async (data) => {
     await categoryService.create(data);

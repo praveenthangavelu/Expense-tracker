@@ -3,37 +3,56 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowRight, Lightbulb } from "lucide-react";
 import { insightService } from "../../services/insightService";
-import Card from "../common/Card";
-import Skeleton from "../common/Skeleton";
+import gamificationService from "../../services/gamificationService";
+import { Skeleton } from "../common/Skeleton";
 
 const bgColors = {
-  positive: "bg-emerald-500/[0.04] border-emerald-500/20 hover:bg-emerald-500/[0.06]",
-  warning: "bg-amber-500/[0.04] border-amber-500/20 hover:bg-amber-500/[0.06]",
-  neutral: "bg-white/[0.02] border-white/5 hover:bg-white/[0.04]",
-  achievement: "bg-violet-500/[0.04] border-violet-500/20 hover:bg-violet-500/[0.06] relative overflow-hidden",
+  positive: "bg-[var(--popup-celebration-bg)] border-[var(--popup-celebration-border)]",
+  warning: "bg-[var(--popup-nudge-bg)] border-[var(--popup-nudge-border)]",
+  achievement: "bg-[var(--popup-funfact-bg)] border-[var(--popup-funfact-border)]",
+  neutral: "bg-[var(--card-bg)] border-[var(--card-border)]",
 };
 
 const titleColors = {
-  positive: "text-emerald-400",
-  warning: "text-amber-400",
-  neutral: "text-slate-200",
-  achievement: "text-violet-400",
+  positive: "text-[var(--mint)]",
+  warning: "text-[var(--solar)]",
+  achievement: "text-[var(--electric)]",
+  neutral: "text-[var(--text-primary)]",
 };
 
 export const InsightCards = () => {
   const navigate = useNavigate();
   const [insights, setInsights] = useState([]);
+  const [activeChallenge, setActiveChallenge] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadInsights = async () => {
       try {
         const now = new Date();
-        const res = await insightService.getInsights({
-          month: now.getMonth() + 1,
-          year: now.getFullYear(),
-        });
-        setInsights(res.data || []);
+        const [insightsResult, challengesResult] = await Promise.allSettled([
+          insightService.getInsights({
+            month: now.getMonth() + 1,
+            year: now.getFullYear(),
+          }),
+          gamificationService.getMineChallenges(),
+        ]);
+
+        if (insightsResult.status === "fulfilled") {
+          setInsights(insightsResult.value.data || []);
+        } else {
+          console.error("Failed to load insights", insightsResult.reason);
+        }
+
+        if (challengesResult.status === "fulfilled") {
+          const challenges = challengesResult.value.data || [];
+          const mostActive = [...challenges].sort(
+            (a, b) => getChallengePercentage(b) - getChallengePercentage(a),
+          )[0];
+          setActiveChallenge(mostActive || null);
+        } else {
+          console.error("Failed to load challenges", challengesResult.reason);
+        }
       } catch (err) {
         console.error("Failed to load insights", err);
       } finally {
@@ -45,85 +64,146 @@ export const InsightCards = () => {
 
   if (loading) {
     return (
-      <Card header={<h2 className="font-display text-lg font-bold text-white flex items-center gap-2"><Lightbulb className="h-5 w-5 text-emerald-400" /> Smart Insights</h2>}>
-        <div className="space-y-3">
-          <Skeleton className="h-20 w-full rounded-2xl" />
-          <Skeleton className="h-20 w-full rounded-2xl" />
+      <div className="space-y-3 w-full">
+        <div className="flex items-center gap-2 mb-2">
+          <Lightbulb className="h-4 w-4 text-[var(--mint)] animate-pulse" />
+          <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-dim)]">Analyzing spending...</span>
         </div>
-      </Card>
+        <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
+          <Skeleton className="h-24 w-[280px] shrink-0 rounded-xl" />
+          <Skeleton className="h-24 w-[280px] shrink-0 rounded-xl" />
+          <Skeleton className="h-24 w-[280px] shrink-0 rounded-xl" />
+        </div>
+      </div>
     );
   }
 
-  if (insights.length === 0) return null;
-
-  const displayInsights = insights.slice(0, 5);
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 15 },
-    visible: { opacity: 1, y: 0 },
-  };
+  const displayInsights = insights.slice(0, 6);
+  const challengePercentage = getChallengePercentage(activeChallenge);
+  const daysLeft = getDaysLeft(activeChallenge?.endDate);
 
   return (
-    <Card
-      header={
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
-            <Lightbulb className="h-5 w-5 text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-            <span>Smart Insights</span>
+    <div className="space-y-3 w-full">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="relative flex h-4.5 w-4.5 items-center justify-center rounded-[3px] bg-[var(--mint-soft)] text-[var(--mint)]">
+            <Lightbulb className="h-3.5 w-3.5" />
+          </div>
+          <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-dim)]">
+            Smart Insights
           </h2>
-          <button
-            onClick={() => navigate("/insights")}
-            className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition"
-          >
-            <span>View All</span>
-            <ArrowRight className="h-3 w-3" />
-          </button>
         </div>
-      }
-    >
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-3"
-      >
-        {displayInsights.map((insight, idx) => (
-          <motion.div
-            key={idx}
-            variants={itemVariants}
-            className={`flex items-start gap-4 rounded-2xl border p-4 transition-all duration-300 ${
-              bgColors[insight.type] || bgColors.neutral
-            }`}
-          >
-            <div className="text-3xl select-none leading-none pt-0.5">
-              {insight.emoji || "💡"}
-            </div>
-            <div className="space-y-0.5">
-              <p className={`font-semibold text-sm ${titleColors[insight.type] || titleColors.neutral}`}>
-                {insight.title}
-              </p>
-              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                {insight.description}
-              </p>
-            </div>
-            {insight.type === "achievement" && (
-              <span className="absolute -right-2 -bottom-2 h-8 w-8 rounded-full bg-violet-400/10 blur-md animate-pulse" />
-            )}
-          </motion.div>
-        ))}
-      </motion.div>
-    </Card>
+        <button
+          onClick={() => navigate("/insights")}
+          className="flex items-center gap-1 text-[11px] font-bold text-[var(--electric)] hover:underline"
+        >
+          <span>View All</span>
+          <ArrowRight className="h-3 w-3" />
+        </button>
+      </div>
+
+      {/* Horizontal Snap Scroll Container */}
+      <div className="flex w-full gap-4 overflow-x-auto pb-1.5 scrollbar-none snap-x snap-mandatory">
+        <motion.div
+          initial={{ opacity: 0, x: 30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          onClick={() => !activeChallenge && navigate("/gamification")}
+          role={!activeChallenge ? "link" : undefined}
+          tabIndex={!activeChallenge ? 0 : undefined}
+          onKeyDown={(event) => {
+            if (!activeChallenge && (event.key === "Enter" || event.key === " ")) {
+              event.preventDefault();
+              navigate("/gamification");
+            }
+          }}
+          className={`flex w-[280px] shrink-0 snap-start items-start gap-3 rounded-xl border p-4 shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] transition-all duration-200 ${
+            activeChallenge
+              ? "bg-[var(--popup-funfact-bg)] border-[var(--popup-funfact-border)]"
+              : "bg-[var(--card-bg)] border-[var(--card-border)] cursor-pointer hover:border-[var(--electric)]"
+          }`}
+        >
+          {activeChallenge ? (
+            <>
+              <span className="text-2xl select-none leading-none flex-shrink-0">
+                {activeChallenge.icon || "🏆"}
+              </span>
+              <div className="min-w-0 flex-1 space-y-2">
+                <h4 className="truncate text-[13px] font-bold tracking-tight text-[var(--text-primary)]">
+                  {activeChallenge.title}
+                </h4>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--progress-track)]">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${challengePercentage}%` }}
+                    transition={{ duration: 1, ease: "easeOut" }}
+                    className="h-full rounded-full bg-gradient-to-r from-[var(--electric)] to-[var(--mint)]"
+                  />
+                </div>
+                <p className="text-[11px] text-[var(--text-secondary)] font-medium">
+                  {challengePercentage}% · {daysLeft} {daysLeft === 1 ? "day" : "days"} left
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="text-2xl select-none leading-none flex-shrink-0">🏆</span>
+              <div className="min-w-0 space-y-0.5">
+                <h4 className="truncate text-[13px] font-bold tracking-tight text-[var(--electric)]">
+                  Join a challenge 🏆
+                </h4>
+                <p className="text-[11px] text-[var(--text-secondary)] font-medium leading-normal">
+                  Start a monthly money mission and track progress here.
+                </p>
+              </div>
+            </>
+          )}
+        </motion.div>
+
+        {displayInsights.map((insight, idx) => {
+          const type = insight.type || "neutral";
+          const cardBg = bgColors[type] || bgColors.neutral;
+          const textClass = titleColors[type] || titleColors.neutral;
+
+          return (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25, delay: (idx + 1) * 0.05 }}
+              className={`flex w-[280px] shrink-0 snap-start items-start gap-3 rounded-xl border p-4 shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] transition-all duration-200 ${cardBg}`}
+            >
+              <span className="text-2xl select-none leading-none flex-shrink-0">
+                {insight.emoji || "💡"}
+              </span>
+              <div className="min-w-0 space-y-0.5">
+                <h4 className={`truncate text-xs font-bold tracking-tight ${textClass}`}>
+                  {insight.title}
+                </h4>
+                <p className="text-[11px] text-[var(--text-secondary)] font-medium leading-normal line-clamp-2">
+                  {insight.description}
+                </p>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
   );
+};
+
+const getChallengePercentage = (challenge) =>
+  Math.min(
+    100,
+    Math.max(
+      0,
+      Number(challenge?.userProgress?.percentage ?? challenge?.progress?.percentage ?? 0),
+    ),
+  );
+
+const getDaysLeft = (endDate) => {
+  if (!endDate) return 0;
+  return Math.max(0, Math.ceil((new Date(endDate).getTime() - Date.now()) / 86400000));
 };
 
 export default InsightCards;

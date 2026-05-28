@@ -1,7 +1,4 @@
-// Import Express so we can create a transaction router.
 import express from "express";
-
-// Import transaction controller functions.
 import {
   create,
   deleteTransaction,
@@ -9,39 +6,47 @@ import {
   getSummary,
   update,
 } from "../controllers/transactionController.js";
-
-// Import auth middleware so every transaction route belongs to a logged-in user.
 import { auth } from "../middleware/auth.js";
-
-// Import validation middleware and transaction schemas.
 import {
   createTransactionSchema,
   updateTransactionSchema,
   validate,
 } from "../middleware/validate.js";
+import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
+import { shortCache } from "../middleware/httpCache.js";
 
-// Create a router for all /api/transactions routes.
 const router = express.Router();
 
-// Apply auth to ALL routes below this line.
-// This means every transaction route requires Authorization: Bearer <token>.
+// All transaction routes require a valid JWT.
 router.use(auth);
 
-// GET /api/transactions
+// GET /api/transactions — dynamic filters make per-request caching impractical.
 router.get("/", getAll);
 
-// CRITICAL: /summary must be mounted before any /:id style route.
-// Express matches routes in order, so if /:id came first, "summary" could be treated as req.params.id.
-router.get("/summary", getSummary);
+// GET /api/transactions/summary — cached per user per month/year for 5 minutes.
+// Must be mounted BEFORE /:id routes or "summary" would be treated as req.params.id.
+router.get(
+  "/summary",
+  shortCache,
+  cacheResponse(
+    (req) => {
+      const now = new Date();
+      const month = req.query.month || now.getMonth() + 1;
+      const year = req.query.year || now.getFullYear();
+      return `summary:${req.user.id}:${month}:${year}`;
+    },
+    300 // 5 minutes
+  ),
+  getSummary
+);
 
-// POST /api/transactions
+// POST /api/transactions — cache invalidation is handled inside the controller.
 router.post("/", validate(createTransactionSchema), create);
 
-// PUT /api/transactions/:id
+// PUT /api/transactions/:id — cache invalidation is handled inside the controller.
 router.put("/:id", validate(updateTransactionSchema), update);
 
-// DELETE /api/transactions/:id
+// DELETE /api/transactions/:id — cache invalidation is handled inside the controller.
 router.delete("/:id", deleteTransaction);
 
-// Export the router so app.js can mount it at /api/transactions.
 export default router;

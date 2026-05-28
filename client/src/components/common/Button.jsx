@@ -4,18 +4,21 @@ import clsx from "clsx";
 
 const variants = {
   primary:
-    "bg-gradient-to-r from-emerald-400 to-teal-500 text-slate-950 shadow-glow hover:from-emerald-300 hover:to-teal-400",
+    "bg-[var(--mint-gradient)] text-[#05060B] hover:shadow-[var(--shadow-glow-mint)] hover:brightness-110 active:brightness-95",
   danger:
-    "bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-coral hover:from-red-400 hover:to-rose-400",
-  ghost: "bg-transparent text-slate-300 hover:bg-white/5 hover:text-white",
-  outline:
-    "border border-white/10 bg-white/[0.02] text-slate-200 hover:border-emerald-400/50 hover:bg-emerald-400/10",
+    "bg-[var(--flame-gradient)] text-white hover:shadow-[var(--shadow-glow-flame)] hover:brightness-110 active:brightness-95",
+  electric:
+    "bg-[var(--electric-gradient)] text-white hover:shadow-[var(--shadow-glow-electric)] hover:brightness-110 active:brightness-95",
+  ghost:
+    "bg-transparent border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]",
+  glass:
+    "bg-[var(--glass-bg)] backdrop-blur-[var(--glass-blur)] border border-[var(--glass-border)] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]",
 };
 
 const sizes = {
-  sm: "px-3 py-2 text-sm",
-  md: "px-4 py-2.5 text-sm",
-  lg: "px-5 py-3 text-base",
+  sm: "px-4 py-2 text-xs rounded-[8px]",
+  md: "px-5 py-2.5 text-sm rounded-[10px]",
+  lg: "px-6 py-3 text-base rounded-[12px]",
 };
 
 const Button = ({
@@ -30,9 +33,11 @@ const Button = ({
 }) => (
   <motion.button
     type={type}
+    whileHover={{ y: disabled || loading ? 0 : -1 }}
     whileTap={{ scale: disabled || loading ? 1 : 0.97 }}
+    transition={{ type: "spring", stiffness: 400, damping: 20 }}
     className={clsx(
-      "inline-flex items-center justify-center gap-2 rounded-2xl font-semibold transition focus:outline-none focus:ring-2 focus:ring-emerald-400/60 disabled:opacity-60",
+      "relative inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)] disabled:opacity-40 disabled:pointer-events-none cursor-pointer",
       variants[variant],
       sizes[size],
       className,
@@ -40,8 +45,14 @@ const Button = ({
     disabled={disabled || loading}
     {...props}
   >
-    {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-    {children}
+    {loading && (
+      <div className="absolute inset-0 flex items-center justify-center bg-inherit rounded-inherit">
+        <Loader2 className="h-4 w-4 animate-spin text-current" />
+      </div>
+    )}
+    <span className={clsx("inline-flex items-center justify-center gap-1.5", loading && "opacity-0 transition-opacity")}>
+      {children}
+    </span>
   </motion.button>
 );
 

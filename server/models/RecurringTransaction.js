@@ -28,7 +28,7 @@ const recurringTransactionSchema = new mongoose.Schema({
   },
   note: {
     type: String,
-    maxlength: 200,
+    maxlength: 500,
     trim: true,
     default: "",
   },
@@ -63,7 +63,11 @@ const recurringTransactionSchema = new mongoose.Schema({
   },
 });
 
-recurringTransactionSchema.index({ user: 1, isActive: 1, nextDueDate: 1 });
+// Cron job query: find active transactions that are due.
+recurringTransactionSchema.index({ isActive: 1, nextDueDate: 1 });
+
+// User's active recurring list query.
+recurringTransactionSchema.index({ user: 1, isActive: 1 });
 
 const RecurringTransaction = mongoose.model(
   "RecurringTransaction",

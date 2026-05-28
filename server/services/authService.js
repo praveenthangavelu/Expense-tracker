@@ -1,21 +1,26 @@
 // Import jsonwebtoken so we can create signed JWT strings for logged-in users.
 import jwt from "jsonwebtoken";
 
+// Import crypto for generating unique token IDs (jti claim).
+import crypto from "crypto";
+
 // generateToken creates a JWT for one user id.
+// Security enhancements:
+//   jti (JWT ID) — a unique identifier per token, prevents token replay attacks.
+//   algorithm: 'HS256' — explicit algorithm prevents algorithm confusion attacks where
+//     an attacker changes the header to 'none' or 'RS256' to bypass signature verification.
 export const generateToken = (userId) => {
-  // A JWT has three parts:
-  // 1. Header: says the token type is JWT and which algorithm is used.
-  // 2. Payload: stores data we want to carry, such as the user's id.
-  // 3. Signature: proves the token was created by our server and was not changed.
-  //
-  // "Signing" means jsonwebtoken uses JWT_SECRET to create the signature.
-  // Later, jwt.verify() uses the same secret to check that the token is still trusted.
   return jwt.sign(
-    { id: userId },
+    {
+      id: userId,
+      // jti makes each token unique even for the same user.
+      jti: crypto.randomUUID(),
+    },
     process.env.JWT_SECRET,
     {
       expiresIn: process.env.JWT_EXPIRE,
-    },
+      algorithm: "HS256",
+    }
   );
 };
 

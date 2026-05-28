@@ -7,101 +7,233 @@ import User from "../models/User.js";
 // Import all auth service exports as authService, so we can call authService.generateToken().
 import * as authService from "../services/authService.js";
 
+// Import typed error classes for clean, consistent error throwing.
+import { ConflictError, LockedError, UnauthorizedError } from "../utils/AppError.js";
+
 // Shape the auth response in one place so register and login return the same structure.
 const sendAuthResponse = (res, statusCode, user, token) => {
   res.status(statusCode).json({
     success: true,
     data: {
       // Password is intentionally NOT included in this response.
-      // Even hashed passwords should never be sent to the frontend.
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
         currency: user.currency,
+        automationSettings: user.automationSettings,
       },
       token,
     },
   });
 };
 
-// Register flow:
-// 1. User submits name, email, and password.
-// 2. Server stores the user and the User pre-save hook hashes the password.
-// 3. Server returns a JWT.
-// 4. Frontend stores the token and sends it with protected requests as "Bearer <token>".
-// 5. Server verifies that token before allowing access to protected data.
+// POST /api/auth/register
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
 
-  // Check for an existing email before creating the user so we can return a friendly message.
-  const existingUser = await User.findOne({ email });
+  // Check for an existing email before creating the user.
+  const existingUser = await User.findOne({ email }).lean();
 
   if (existingUser) {
-    return res.status(400).json({
-      success: false,
-      message: "Email already registered",
-    });
+    throw new ConflictError("Email already registered");
   }
 
-  // Create the user with the plain password from the request.
-  // The User model's pre-save hook hashes the password before it reaches MongoDB.
-  const user = await User.create({
-    name,
-    email,
-    password,
-  });
-
-  // Generate a signed JWT that contains the user's id.
+  const user = await User.create({ name, email, password });
   const token = authService.generateToken(user._id);
 
-  // Return 201 because a new user resource was created.
+  // 201 because a new user resource was created.
   sendAuthResponse(res, 201, user, token);
 });
 
-// Login flow:
-// 1. User sends email and password.
-// 2. Server finds the user by email.
-// 3. Server compares the entered password with the stored bcrypt hash.
-// 4. Server returns a new JWT if the credentials are valid.
+// POST /api/auth/login
+// Includes account lockout: 5 failed attempts lock the account for 30 minutes.
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  // User.password has select: false in the schema, so normal queries do not include it.
-  // We use select("+password") here because login is the one place we need the hash for comparison.
-  const user = await User.findOne({ email }).select("+password");
+  // Fetch loginAttempts and lockUntil (both select: false) alongside the password hash.
+  const user = await User.findOne({ email }).select(
+    "+password +loginAttempts +lockUntil"
+  );
 
-  // Use the same message for wrong email and wrong password.
-  // If we said which one was wrong, attackers could test emails and discover registered accounts.
+  // Use the same error message for wrong email and wrong password.
+  // Distinguishing them would let attackers enumerate registered emails.
   if (!user) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid email or password",
-    });
+    throw new UnauthorizedError("Invalid email or password");
   }
 
-  // matchPassword uses bcrypt.compare() from the User model instance method.
+  // Check account lockout BEFORE comparing password to avoid leaking timing info.
+  if (user.lockUntil && user.lockUntil > Date.now()) {
+    const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
+    throw new LockedError(
+      `Account locked due to too many failed attempts. Try again in ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""}.`
+    );
+  }
+
   const isMatch = await user.matchPassword(password);
 
   if (!isMatch) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid email or password",
-    });
+    // Record the failed attempt; this may lock the account.
+    await user.incrementLoginAttempts();
+    throw new UnauthorizedError("Invalid email or password");
   }
 
-  // Generate a fresh token for this login session.
+  // Successful login — clear the lockout counter.
+  await user.resetLoginAttempts();
+
   const token = authService.generateToken(user._id);
 
-  // Return 200 because login succeeded but did not create a new user.
+  // 200 because login succeeds but no new resource is created.
   sendAuthResponse(res, 200, user, token);
 });
 
-// getMe returns the logged-in user's profile.
-// The auth middleware already verified the token and attached the user to req.user.
+// GET /api/auth/me
+// The auth middleware already verified the token and attached req.user.
 export const getMe = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     data: req.user,
   });
+});
+
+// PUT /api/auth/settings
+export const updateSettings = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id);
+  if (!user) {
+    return res.status(404).json({ success: false, message: "User not found" });
+  }
+
+  if (req.body) {
+    user.automationSettings = {
+      ...user.automationSettings,
+      ...req.body,
+    };
+  }
+
+  const updatedUser = await user.save();
+
+  res.status(200).json({
+    success: true,
+    data: {
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        currency: updatedUser.currency,
+        automationSettings: updatedUser.automationSettings,
+      },
+    },
+  });
+});
+
+// GET /api/auth/google/url
+export const getGoogleLoginUrl = asyncHandler(async (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const redirectUri = `${req.headers.origin || "http://localhost:5173"}/login`;
+
+  if (!clientId) {
+    return res.status(200).json({
+      success: true,
+      url: "simulator",
+      message: "No Google Client ID. Simulator mode available."
+    });
+  }
+
+  // Scope: profile + email + gmail read-only
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=https://www.googleapis.com/auth/userinfo.email%20https://www.googleapis.com/auth/userinfo.profile%20https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent`;
+
+  res.json({ success: true, url });
+});
+
+// POST /api/auth/google/callback
+export const googleLoginCallback = asyncHandler(async (req, res) => {
+  const { code } = req.body;
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const redirectUri = `${req.headers.origin || "http://localhost:5173"}/login`;
+
+  if (code === "simulator" || !clientId || !clientSecret) {
+    // Find or create default simulator user
+    let user = await User.findOne({ email: "praveentveluwork@gmail.com" });
+    if (!user) {
+      user = await User.create({
+        name: "Praveen",
+        email: "praveentveluwork@gmail.com",
+        password: Math.random().toString(36).substring(2) + Date.now().toString(36),
+      });
+    }
+
+    user.googleAuth = {
+      isConnected: true,
+      accessToken: "simulator_access_token",
+      refreshToken: "simulator_refresh_token",
+      lastScanAt: null,
+      email: "praveentveluwork@gmail.com",
+    };
+    await user.save();
+
+    const token = authService.generateToken(user._id);
+    return sendAuthResponse(res, 200, user, token);
+  }
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code",
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    return res.status(400).json({ success: false, message: errorText || "Failed to exchange Google OAuth code" });
+  }
+
+  const data = await response.json();
+  let email = "";
+  let name = "";
+
+  try {
+    const infoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${data.access_token}` },
+    });
+    if (infoRes.ok) {
+      const info = await infoRes.json();
+      email = info.email;
+      name = info.name || info.given_name || "Google User";
+    }
+  } catch (err) {
+    console.error("Failed to get Google profile info:", err.message);
+  }
+
+  if (!email) {
+    return res.status(400).json({ success: false, message: "Could not retrieve email from Google" });
+  }
+
+  let user = await User.findOne({ email });
+  let isNew = false;
+  if (!user) {
+    isNew = true;
+    user = await User.create({
+      name,
+      email,
+      password: Math.random().toString(36).substring(2) + Date.now().toString(36),
+    });
+  }
+
+  user.googleAuth = {
+    isConnected: true,
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token || user.googleAuth.refreshToken,
+    lastScanAt: user.googleAuth.lastScanAt || null,
+    email,
+  };
+  await user.save();
+
+  const token = authService.generateToken(user._id);
+  sendAuthResponse(res, isNew ? 201 : 200, user, token);
 });

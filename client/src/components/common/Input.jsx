@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { motion, AnimatePresence } from "framer-motion";
 
 const Input = ({
   label,
@@ -15,34 +16,51 @@ const Input = ({
     <label className="group block" htmlFor={inputId}>
       <div
         className={clsx(
-          "relative rounded-2xl border bg-white/[0.03] transition focus-within:border-emerald-400/70 focus-within:shadow-[0_0_0_4px_rgba(16,185,129,0.08)]",
-          error ? "border-red-400/70" : "border-white/10",
+          "relative rounded-[10px] border bg-[var(--input-bg)] transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          error
+            ? "border-[var(--flame)]/50 focus-within:border-[var(--flame)] focus-within:shadow-[0_0_0_3px_var(--flame-soft)]"
+            : "border-[var(--input-border)] focus-within:border-[var(--input-focus-border)] focus-within:shadow-[0_0_0_3px_var(--mint-soft)]",
           className,
         )}
       >
         {Icon && (
-          <Icon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500 transition group-focus-within:text-emerald-300" />
+          <Icon className={clsx(
+            "absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--text-secondary)] transition-colors duration-200",
+            error ? "group-focus-within:text-[var(--flame)]" : "group-focus-within:text-[var(--mint)]"
+          )} />
         )}
         <input
           id={inputId}
           type={type}
           placeholder=" "
           className={clsx(
-            "peer w-full rounded-2xl border-0 bg-transparent px-4 pb-2.5 pt-6 text-white outline-none ring-0 placeholder:text-transparent focus:ring-0",
+            "peer w-full rounded-[10px] border-0 bg-transparent px-4 pb-2 pt-6 text-[var(--text-primary)] outline-none ring-0 placeholder:text-transparent focus:ring-0 text-sm font-normal",
             Icon && "pl-12",
           )}
           {...props}
         />
         <span
           className={clsx(
-            "pointer-events-none absolute top-2 text-xs font-medium text-slate-500 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm peer-focus:top-2 peer-focus:text-xs peer-focus:text-emerald-300",
+            "pointer-events-none absolute top-1.5 text-xs font-medium text-[var(--text-secondary)] transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm peer-focus:top-1.5 peer-focus:text-xs",
+            error ? "peer-focus:text-[var(--flame)]" : "peer-focus:text-[var(--mint)]",
             Icon ? "left-12" : "left-4",
           )}
         >
           {label}
         </span>
       </div>
-      {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <p className="mt-1.5 text-xs font-medium text-[var(--flame)]">{error}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </label>
   );
 };
