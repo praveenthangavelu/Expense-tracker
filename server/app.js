@@ -59,10 +59,16 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (server-to-server, Postman in dev).
       if (!origin) return callback(null, true);
+      const normalizedOrigin = String(origin).toLowerCase();
       // Allow the configured frontend URL and any localhost port in development.
       if (
         origin === process.env.CLIENT_URL ||
-        /^https?:\/\/localhost:\d+$/.test(origin)
+        /^https?:\/\/localhost:\d+$/.test(origin) ||
+        // Allow Vercel deployments for this project (production + preview URLs).
+        // Example: https://expense-tracker-beta-orcin.vercel.app
+        // Example: https://expense-tracker-9h2nbjpvv-praveentvelu.vercel.app
+        /^https:\/\/expense-tracker(?:-[a-z0-9-]+)?\.vercel\.app$/.test(normalizedOrigin) ||
+        /^https:\/\/expense-tracker-[a-z0-9-]+-praveentvelu\.vercel\.app$/.test(normalizedOrigin)
       ) {
         return callback(null, true);
       }
